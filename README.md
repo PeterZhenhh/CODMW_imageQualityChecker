@@ -3,17 +3,13 @@ A tool to show exported texture resolution to determine if you have exported hig
 
 # Usage
 1. Use Scobalula's ModernModellingWarfare (https://github.com/Scobalula/ModernModellingWarfare) to export assets you need.
-2. Open this tool and enter the filepath of "MaterialCache.scab"
-3. When finish loading cache, enter texture's filename to show its highest resolution. You can use this to check the resolution of textures you exported.
+2. Edit the MaterialCachePath.txt and xmodelsPath.txt file with the path to where file "MaterialCache.scab" and exported directory "xmodels"  is located.
+3. Open this tool and wait until it finishes processing.
+4. check "record.csv" in current directory to know found issues.
 
-# Usage Example
-```bash
-Material Cache Path: E:\ModernModellingWarfare\Data\MaterialCache.scab
-Loading cache
-imgFileName to search: female_viewmodel_arms_a_n&farah_viewmodel_arms_dirt_g~17787237959281176943
-2048 x 4096
-2048 x 4096
-2048 x 4096
-2048 x 4096
-2048 x 4096
-imgFileName to search:
+# About IssueType and how to resolve
+Currently there're 3 IssueType you can find in record.csv
+
+Mat_NotFoundInCache - Exported Material was not found in "MaterialCache.scab". You should update it.(not tested)  
+Img_NotExported - Some texture belong to the material was not found in its material folder. It's common for some "tiny" texture like "$white", "$black"，etc. Or you need to debug Scobalula's ModernModellingWarfare.  
+Img_LowRes - The exported texture is NOT highest resolution. You should aunch the game and wait it finishes HQ Texture streaming.  

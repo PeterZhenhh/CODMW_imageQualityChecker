@@ -1,4 +1,9 @@
 import struct
+from PIL import Image
+import os
+import csv
+
+recordPath = os.path.join(os.getcwd(), "record.csv")
 
 
 def StrFromBytes(bar, enc="ASCII"):
@@ -119,7 +124,7 @@ def readInGameMaterial(f):
 
 
 def MaterialCacheParser(cachePath):
-    print("Loading cache")
+    print("Loading cache from", cachePath)
     mtls = []
     f = open(cachePath, "rb")
     GameDirectory = readString(f)
@@ -134,15 +139,121 @@ def MaterialCacheParser(cachePath):
     return mtls
 
 
-def main():
-    MaterialCacheParh = input("Material Cache Path: ").replace("\\", "/")
-    materialsInfo = MaterialCacheParser(MaterialCacheParh)
-    while True:
-        imgFileName = input("imgFileName to search: ")
-        for mat in materialsInfo:
+def findHighestRes(materialsInfo, matName):
+    result = []
+    for mat in materialsInfo:
+        if mat["Name"] == matName:
+            result = []
             for img in mat["Images"]:
-                if img["Name"] == imgFileName:
-                    print(img["Width"], "x", img["Height"])
+                result.append(
+                    {"imgName": img["Name"], "size": (img["Width"], img["Height"])}
+                )
+    return result
+
+
+def main():
+    MaterialCachePath_FilePath = os.path.join(os.getcwd(), "MaterialCachePath.txt")
+    xmodelsPath_FilePath = os.path.join(os.getcwd(), "xmodelsPath.txt")
+    if not (os.path.exists(MaterialCachePath_FilePath)):
+        print(MaterialCachePath_FilePath, "not found")
+        return 1
+    if not (os.path.exists(xmodelsPath_FilePath)):
+        print(xmodelsPath_FilePath, "not found")
+        return 1
+    MaterialCachePath = open(MaterialCachePath_FilePath).read()
+    xmodelsPath = open(xmodelsPath_FilePath).read()
+    materialsInfo = MaterialCacheParser(MaterialCachePath)  # Load Material Cache
+
+    # Init recordCSV
+    recordCsvHeaders = [
+        "IssueType",
+        "xmodelName",
+        "materialName",
+        "materialPath",
+        "HQImgName",
+        "HQImgResolution",
+        "exportedImgName",
+        "exportedImgResolution",
+    ]
+    f_csv_file=open(
+            recordPath,
+            "w",
+            newline="",
+        )
+    f_csv = csv.writer(f_csv_file)
+    f_csv.writerow(recordCsvHeaders)
+    # Inited recordCSV
+
+    for xmodelDir in os.listdir(xmodelsPath):
+        imagesPath = os.path.join(xmodelsPath, xmodelDir, "_images")
+        for materialDir in os.listdir(imagesPath):
+            materialPath = os.path.join(imagesPath, materialDir)
+            exportedMaterial = []
+            for imgFile in os.listdir(materialPath):
+                imgFilePath = os.path.join(materialPath, imgFile)
+                exportedImg = Image.open(imgFilePath)
+                exportedMaterial.append(
+                    {"imgName": os.path.splitext(imgFile)[0], "size": exportedImg.size}
+                )
+
+            expectedMaterial = findHighestRes(materialsInfo, materialDir)
+            if not (expectedMaterial):
+                f_csv.writerow(
+                    ["Mat_NotFoundInCache\t", xmodelDir, materialDir, materialPath]
+                )
+                continue  # check next Material
+            for expectedImg in expectedMaterial:
+                found = False
+                for exportedImg in exportedMaterial:
+                    if expectedImg["imgName"] == exportedImg["imgName"]:
+                        found = True
+                        foundImg = exportedImg
+                        break
+                if found:
+                    if not (foundImg["size"] == expectedImg["size"]):
+                        print(
+                            "Img_LowRes\t",
+                            xmodelDir,
+                            materialDir,
+                            expectedImg["imgName"],
+                            expectedImg["size"],
+                            foundImg["imgName"],
+                            foundImg["size"],
+                        )
+                        f_csv.writerow(
+                            [
+                                "Img_LowRes\t",
+                                xmodelDir,
+                                materialDir,
+                                materialPath,
+                                expectedImg["imgName"],
+                                expectedImg["size"],
+                                foundImg["imgName"],
+                                foundImg["size"],
+                            ]
+                        )
+                else:
+                    print(
+                        "Img_NotExported",
+                        xmodelDir,
+                        materialDir,
+                        expectedImg["imgName"],
+                        expectedImg["size"],
+                    )
+                    f_csv.writerow(
+                        [
+                            "Img_NotExported",
+                            xmodelDir,
+                            materialDir,
+                            materialPath,
+                            expectedImg["imgName"],
+                            expectedImg["size"],
+                        ]
+                    )
+    f_csv_file.close()
+    print("\nfinished")
+    os.system("pause")
+    return 0
 
 
 main()
