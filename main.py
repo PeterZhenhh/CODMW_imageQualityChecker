@@ -2,9 +2,17 @@ import struct
 from PIL import Image
 import os
 import csv
+from operator import itemgetter
+from functools import reduce
+OK_MODEL = []
+UNFIXED_MODEL = []
+ERROR_MODEL = []
+LOWRES_MODEL = []
 
 recordPath = os.path.join(os.getcwd(), "record.csv")
-
+def remove_list_dict_duplicate(list_dict_data):
+    run_function = lambda x, y: x if y in x else x + [y]
+    return reduce(run_function, [[], ] + list_dict_data)
 
 def StrFromBytes(bar, enc="ASCII"):
     return str(bar, enc).rstrip("\0")
@@ -136,6 +144,7 @@ def MaterialCacheParser(cachePath):
             mtl["Images"].append(readInGameImage(f))
             # print(mtl["Images"][-1])# Display current image Info
         mtls.append(mtl)
+    print("Loaded", str(len(mtls)), "materials from cache")
     return mtls
 
 
@@ -146,23 +155,31 @@ def findHighestRes(materialsInfo, matName):
             result = []
             for img in mat["Images"]:
                 result.append(
-                    {"imgName": img["Name"], "size": (img["Width"], img["Height"])}
+                    {"imgName": img["Name"], "size": (
+                        img["Width"], img["Height"])}
                 )
     return result
 
 
-def main():
-    MaterialCachePath_FilePath = os.path.join(os.getcwd(), "MaterialCachePath.txt")
-    xmodelsPath_FilePath = os.path.join(os.getcwd(), "xmodelsPath.txt")
+def loadCache():
+    MaterialCachePath_FilePath = os.path.join(
+        os.getcwd(), "MaterialCachePath.txt")
     if not (os.path.exists(MaterialCachePath_FilePath)):
         print(MaterialCachePath_FilePath, "not found")
         return 1
+    MaterialCachePath = open(MaterialCachePath_FilePath).read()
+    materialsInfo = MaterialCacheParser(
+        MaterialCachePath)  # Load Material Cache
+    return materialsInfo
+
+
+def main(materialsInfo):
+    global OK_MODEL, UNFIXED_MODEL, ERROR_MODEL, LOWRES_MODEL
+    xmodelsPath_FilePath = os.path.join(os.getcwd(), "xmodelsPath.txt")
     if not (os.path.exists(xmodelsPath_FilePath)):
         print(xmodelsPath_FilePath, "not found")
         return 1
-    MaterialCachePath = open(MaterialCachePath_FilePath).read()
     xmodelsPath = open(xmodelsPath_FilePath).read()
-    materialsInfo = MaterialCacheParser(MaterialCachePath)  # Load Material Cache
 
     # Init recordCSV
     recordCsvHeaders = [
@@ -170,21 +187,23 @@ def main():
         "xmodelName",
         "materialName",
         "materialPath",
-        "HQImgName",
-        "HQImgResolution",
-        "exportedImgName",
-        "exportedImgResolution",
+        "ImgName",
+        "HQResolution",
+        "exportedResolution",
     ]
-    f_csv_file=open(
-            recordPath,
-            "w",
-            newline="",
-        )
+    f_csv_file = open(
+        recordPath,
+        "w",
+        newline="",
+    )
     f_csv = csv.writer(f_csv_file)
     f_csv.writerow(recordCsvHeaders)
     # Inited recordCSV
 
     for xmodelDir in os.listdir(xmodelsPath):
+        modelStatus = 0
+        # 0:normal, 1:has tex not exported, 2:has extra unknown tex, 3:has low-res tex
+        texNotExported = []
         imagesPath = os.path.join(xmodelsPath, xmodelDir, "_images")
         for materialDir in os.listdir(imagesPath):
             materialPath = os.path.join(imagesPath, materialDir)
@@ -193,67 +212,116 @@ def main():
                 imgFilePath = os.path.join(materialPath, imgFile)
                 exportedImg = Image.open(imgFilePath)
                 exportedMaterial.append(
-                    {"imgName": os.path.splitext(imgFile)[0], "size": exportedImg.size}
+                    {"imgName": os.path.splitext(
+                        imgFile)[0], "size": exportedImg.size}
                 )
-
-            expectedMaterial = findHighestRes(materialsInfo, materialDir)
+            expectedMaterial = sorted(remove_list_dict_duplicate(findHighestRes(materialsInfo, materialDir)), key=itemgetter('imgName', 'size'))
+            exportedMaterial = sorted(
+                exportedMaterial, key=itemgetter('imgName', 'size'))
             if not (expectedMaterial):
                 f_csv.writerow(
                     ["Mat_NotFoundInCache\t", xmodelDir, materialDir, materialPath]
                 )
-                continue  # check next Material
-            for expectedImg in expectedMaterial:
-                found = False
-                for exportedImg in exportedMaterial:
-                    if expectedImg["imgName"] == exportedImg["imgName"]:
-                        found = True
-                        foundImg = exportedImg
-                        break
-                if found:
-                    if not (foundImg["size"] == expectedImg["size"]):
-                        print(
-                            "Img_LowRes\t",
-                            xmodelDir,
-                            materialDir,
-                            expectedImg["imgName"],
-                            expectedImg["size"],
-                            foundImg["imgName"],
-                            foundImg["size"],
-                        )
-                        f_csv.writerow(
-                            [
-                                "Img_LowRes\t",
+                print(
+                    "Material cache is outdated, please use ModernModellingWarfare to update")
+                print(xmodelDir, materialDir)
+                os.system("pause")
+                return 1
+            if(exportedMaterial == expectedMaterial):
+                continue  # goto check next material
+            else:
+                if(len(exportedMaterial) < len(expectedMaterial)):
+                    if(modelStatus != 3):
+                        modelStatus = 1
+                elif(len(exportedMaterial) > len(expectedMaterial)):
+                    if(modelStatus != 3):
+                        modelStatus = 2
+                if True:  # find which tex is low-res or not exported
+                    for expectedImg in expectedMaterial:
+                        texFound = False
+                        for exportedImg in exportedMaterial:
+                            if(exportedImg["imgName"] == expectedImg["imgName"]):
+                                texFound = True
+                                if(exportedImg["size"] != expectedImg["size"]):
+                                    modelStatus = 3
+                                    print(
+                                        "Img_LowRes\t",
+                                        xmodelDir,
+                                        materialDir,
+                                        expectedImg["imgName"],
+                                        expectedImg["size"],
+                                        exportedImg["size"]
+                                    )
+                                    f_csv.writerow([
+                                        "Img_LowRes\t",
+                                        xmodelDir,
+                                        materialDir,
+                                        materialPath,
+                                        expectedImg["imgName"],
+                                        expectedImg["size"],
+                                        exportedImg["size"]]
+                                    )
+                        if not texFound:
+                            texNotExported.append(
+                                str(expectedImg["imgName"]+" "+materialPath))
+                            print(
+                                "Img_NotExported",
                                 xmodelDir,
                                 materialDir,
-                                materialPath,
                                 expectedImg["imgName"],
-                                expectedImg["size"],
-                                foundImg["imgName"],
-                                foundImg["size"],
-                            ]
-                        )
-                else:
-                    print(
-                        "Img_NotExported",
-                        xmodelDir,
-                        materialDir,
-                        expectedImg["imgName"],
-                        expectedImg["size"],
-                    )
-                    f_csv.writerow(
-                        [
-                            "Img_NotExported",
-                            xmodelDir,
-                            materialDir,
-                            materialPath,
-                            expectedImg["imgName"],
-                            expectedImg["size"],
-                        ]
-                    )
+                                expectedImg["size"]
+                            )
+                            f_csv.writerow(
+                                [
+                                    "Img_NotExported",
+                                    xmodelDir,
+                                    materialDir,
+                                    materialPath,
+                                    expectedImg["imgName"],
+                                    expectedImg["size"],
+                                ]
+                            )
+        if(modelStatus == 0):
+            OK_MODEL.append(xmodelDir)
+        elif(modelStatus == 1):
+            UNFIXED_MODEL.append([xmodelDir, texNotExported])
+        elif(modelStatus == 2):
+            ERROR_MODEL.append(xmodelDir)
+        elif(modelStatus == 3):
+            LOWRES_MODEL.append(xmodelDir)
+
     f_csv_file.close()
-    print("\nfinished")
-    os.system("pause")
     return 0
 
 
-main()
+materialsInfo = loadCache()
+while True:
+    OK_MODEL = []
+    LOWRES_MODEL = []
+    UNFIXED_MODEL = []
+    ERROR_MODEL = []
+    main(materialsInfo)
+    if(OK_MODEL):
+        print("OK "+str(len(OK_MODEL))+" - The following "+str(len(OK_MODEL))+" model textures are all Hi-res")
+        for i in OK_MODEL:
+            print(i)
+    print()
+    if(LOWRES_MODEL):
+        print("LOWRES "+str(len(LOWRES_MODEL))+" - The following "+str(len(LOWRES_MODEL))+" model have low-res texture")
+        for i in LOWRES_MODEL:
+            print(i)
+    print()
+    if(UNFIXED_MODEL):
+        print("CanFix "+str(len(UNFIXED_MODEL))+" - The following "+str(len(UNFIXED_MODEL))+" model need to export texture manually")
+        for i in UNFIXED_MODEL:
+            print(i[0])
+            for j in i[1]:
+                print(j)
+            print()
+    print()
+    if(ERROR_MODEL):
+        print("ERROR "+str(len(ERROR_MODEL))+" - The following "+str(len(ERROR_MODEL))+" model have textures that shouldn't exist")
+        for i in ERROR_MODEL:
+            print(i)
+
+    os.system("pause")
