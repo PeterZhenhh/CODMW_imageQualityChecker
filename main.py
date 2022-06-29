@@ -4,6 +4,7 @@ import os
 import csv
 from operator import itemgetter
 from functools import reduce
+import json
 OK_MODEL = []
 UNFIXED_MODEL = []
 ERROR_MODEL = []
@@ -161,25 +162,8 @@ def findHighestRes(materialsInfo, matName):
     return result
 
 
-def loadCache():
-    MaterialCachePath_FilePath = os.path.join(
-        os.getcwd(), "MaterialCachePath.txt")
-    if not (os.path.exists(MaterialCachePath_FilePath)):
-        print(MaterialCachePath_FilePath, "not found")
-        return 1
-    MaterialCachePath = open(MaterialCachePath_FilePath).read()
-    materialsInfo = MaterialCacheParser(
-        MaterialCachePath)  # Load Material Cache
-    return materialsInfo
-
-
-def main(materialsInfo):
+def main(materialsInfo,xmodelsPath):
     global OK_MODEL, UNFIXED_MODEL, ERROR_MODEL, LOWRES_MODEL
-    xmodelsPath_FilePath = os.path.join(os.getcwd(), "xmodelsPath.txt")
-    if not (os.path.exists(xmodelsPath_FilePath)):
-        print(xmodelsPath_FilePath, "not found")
-        return 1
-    xmodelsPath = open(xmodelsPath_FilePath).read()
 
     # Init recordCSV
     recordCsvHeaders = [
@@ -244,14 +228,14 @@ def main(materialsInfo):
                                 texFound = True
                                 if(exportedImg["size"] != expectedImg["size"]):
                                     modelStatus = 3
-                                    print(
-                                        "Img_LowRes\t",
-                                        xmodelDir,
-                                        materialDir,
-                                        expectedImg["imgName"],
-                                        expectedImg["size"],
-                                        exportedImg["size"]
-                                    )
+                                    # print(
+                                    #     "Img_LowRes\t",
+                                    #     xmodelDir,
+                                    #     materialDir,
+                                    #     expectedImg["imgName"],
+                                    #     expectedImg["size"],
+                                    #     exportedImg["size"]
+                                    # )
                                     f_csv.writerow([
                                         "Img_LowRes\t",
                                         xmodelDir,
@@ -293,35 +277,56 @@ def main(materialsInfo):
     f_csv_file.close()
     return 0
 
+loadConfigPaths=json.load(open(os.path.join(os.getcwd(),"config.json"),"r"))
+materialsInfo = MaterialCacheParser(loadConfigPaths["materialCachePath"])
+xmodelsPath=loadConfigPaths["xmodelsPath"]
 
-materialsInfo = loadCache()
 while True:
     OK_MODEL = []
     LOWRES_MODEL = []
     UNFIXED_MODEL = []
     ERROR_MODEL = []
-    main(materialsInfo)
-    if(OK_MODEL):
-        print("OK "+str(len(OK_MODEL))+" - The following "+str(len(OK_MODEL))+" model textures are all Hi-res")
-        for i in OK_MODEL:
-            print(i)
-    print()
+    main(materialsInfo,xmodelsPath)
+    
     if(LOWRES_MODEL):
+        print()
         print("LOWRES "+str(len(LOWRES_MODEL))+" - The following "+str(len(LOWRES_MODEL))+" model have low-res texture")
         for i in LOWRES_MODEL:
             print(i)
-    print()
+    
+    
+    if(ERROR_MODEL):
+        print("ERROR "+str(len(ERROR_MODEL))+" - The following "+str(len(ERROR_MODEL))+" model have textures that shouldn't exist")
+        for i in ERROR_MODEL:
+            print(i)
+    if(OK_MODEL):
+        print()
+        print("OK "+str(len(OK_MODEL))+" - The following "+str(len(OK_MODEL))+" model textures are all Hi-res")
+        for i in OK_MODEL:
+            print(i)
+    
     if(UNFIXED_MODEL):
+        print()
         print("CanFix "+str(len(UNFIXED_MODEL))+" - The following "+str(len(UNFIXED_MODEL))+" model need to export texture manually")
         for i in UNFIXED_MODEL:
             print(i[0])
             for j in i[1]:
                 print(j)
             print()
-    print()
-    if(ERROR_MODEL):
-        print("ERROR "+str(len(ERROR_MODEL))+" - The following "+str(len(ERROR_MODEL))+" model have textures that shouldn't exist")
-        for i in ERROR_MODEL:
-            print(i)
 
+    try:
+        additiveModels=[]
+        existedModelPath=loadConfigPaths["existedModelPath"]
+        existedModels=os.listdir(existedModelPath)
+        for hiResModel in OK_MODEL:
+            if not (hiResModel in existedModels):
+                additiveModels.append(hiResModel)
+        if(additiveModels):
+            print()
+            print("CanAdd "+str(len(additiveModels))+" - The following "+str(len(additiveModels))+" model can be added") 
+            for i in additiveModels:
+                print(i)
+    except:
+        raise()
+    
     os.system("pause")
