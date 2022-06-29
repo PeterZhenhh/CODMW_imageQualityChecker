@@ -2,7 +2,7 @@
 A tool to show exported texture resolution to determine if you have exported highest quality texture
 
 # Usage
-1. Use Scobalula's ModernModellingWarfare (https://github.com/Scobalula/ModernModellingWarfare) to export assets you need.
+1. Use Scobalula's ModernModellingWarfare (https://github.com/Scobalula/ModernModellingWarfare) or Greyhound (https://github.com/Scobalula/Greyhound) to export models you need.
 2. Edit "config.json" with the path to where file "MaterialCache.scab" and exported directory "xmodels" is located.
 3. Open this tool and wait until it finishes processing.
 4. check "record.csv" in current directory to know found issues.
